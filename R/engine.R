@@ -561,6 +561,85 @@ heading.title.font.size = gt::px(20),
 data_row.padding = gt::px(6))
 }
 
+# --------------------------- PRESEASON SNAPSHOT ------------------------------
+# Publishes the initial (roster-seeded) Glicko-2 ratings as "Week 1 Power
+# Rankings" before any games have been played this season. Games/Win/Draw/
+# Loss are all 0 and Points For/Against are NA (no games to compute them
+# from yet). Mirrors run_power_rankings()'s CSV/graphic output shape so the
+# Shiny app's existing readers (weekly_csv(), build_graphic()) work
+# unchanged -- this is not a separate "Week 0" concept, just Week 1 filled
+# in for the one case the normal pipeline can't reach on its own. Called
+# from run_power_rankings() when completed_weeks is empty; see there.
+write_preseason_snapshot <- function(teams, roster_scores, league, league_tag,
+season_label, weeks_dir, graphic_dir,
+pr_dir, base_dir, make_graphic) {
+roster_ids <- sort(teams$roster_id)
+id_to_owner <- setNames(teams$owner, teams$roster_id)
+
+if (is.null(roster_scores)) {
+init_rating <- rep(1500, length(roster_ids))
+} else {
+stopifnot(length(roster_scores) == length(roster_ids))
+init_rating <- as.numeric(1500 + scale(roster_scores) * 100)
+}
+
+rankings <- data.frame(
+Player = unname(id_to_owner[as.character(roster_ids)]),
+roster_id = roster_ids,
+Rating = init_rating, Deviation = 200, Volatility = 0.06,
+Games = 0L, Win = 0, Draw = 0, Loss = 0, Lag = NA_integer_,
+stringsAsFactors = FALSE
+)
+
+for (d in c(base_dir, pr_dir, weeks_dir, graphic_dir)) {
+if (!dir.exists(d)) dir.create(d, recursive = TRUE)
+}
+
+csv_out <- rankings[order(rankings$roster_id),
+c("Player", "Rating", "Deviation", "Volatility",
+"Games", "Win", "Draw", "Loss", "Lag")]
+weekly_file <- file.path(weeks_dir, paste0(season_label, " ", league_tag,
+" Week 1 Power Rankings.csv"))
+write.csv(csv_out, weekly_file, row.names = FALSE)
+message("Preseason snapshot written: ", weekly_file)
+
+tbl <- rankings[order(-rankings$Rating), ]
+tbl$rank <- seq_len(nrow(tbl))
+tbl$rank_change <- NA_integer_
+tbl$rating_change <- NA_real_
+tbl <- merge(tbl, teams, by = "roster_id", all.x = TRUE, sort = FALSE)
+tbl <- tbl[order(tbl$rank), ]
+tbl$record <- "0-0"
+tbl$move <- "â"
+tbl$avatar_url[is.na(tbl$avatar_url)] <-
+"https://sleepercdn.com/images/v2/icons/league/league_avatar_mint.png"
+tbl$avg_pf <- NA_real_
+tbl$avg_pa <- NA_real_
+
+png_file <- file.path(graphic_dir, paste0(season_label, " ", league_tag,
+" Week 1 Power Rankings.png"))
+if (make_graphic) {
+pr_table <- build_graphic(tbl, league$name, 1, 0)
+pdf_file <- sub("\\.png$", ".pdf", png_file)
+save_ok <- tryCatch({
+gt::gtsave(pr_table, png_file, expand = 10)
+gt::gtsave(pr_table, pdf_file, expand = 10)
+TRUE
+}, error = function(e) {
+warning("Graphic export failed (chromote requires Chrome/Edge): ",
+conditionMessage(e), "\nSaving HTML fallback instead.")
+gt::gtsave(pr_table, sub("\\.png$", ".html", png_file))
+FALSE
+})
+message(if (save_ok) paste0("Graphic saved: ", png_file, " (+ PDF)")
+else "HTML fallback saved; install Chrome for PNG/PDF export.")
+}
+
+message("Done. ", league_tag, " preseason snapshot (Week 1) complete.")
+invisible(list(rankings = tbl, games = NULL, points_against = NULL,
+weekly_file = weekly_file, png_file = png_file))
+}
+
 # --------------------------- MAIN ENTRY POINT --------------------------------
 
 # league_id Sleeper league ID (string)
@@ -604,17 +683,30 @@ completed_weeks <- integer(0)
 if (!is.null(through_week)) {
 completed_weeks <- completed_weeks[completed_weeks <= through_week]
 }
-if (!length(completed_weeks)) {
-stop("No completed regular-season weeks for league ", league_id,
-" (season ", league$season, ", NFL state: ", state$season_type,
-" week ", state$week, "). Nothing to compute.")
-}
 
 teams <- build_team_table(users, rosters, owner_map)
 if (nrow(teams) != n_teams) {
 stop("Expected ", n_teams, " rosters, got ", nrow(teams))
 }
 id_to_owner <- setNames(teams$owner, teams$roster_id)
+
+if (!length(completed_weeks)) {
+# No games played yet. Rather than failing, publish a preseason snapshot
+# (initial, roster-seeded ratings only -- no games/results) so there is
+# something to look at before Week 1 kicks off. This lands as "Week 1
+# Power Rankings" under this app's existing numbering -- a week-N file
+# always means "ratings heading into week N" -- and Week 1 is otherwise a
+# slot that never gets written on its own: the first REAL weekly file
+# always jumps straight to Week 2 once Week 1's games finish. Force this
+# to (re)run at any time via the Action's "Run workflow" button
+# (workflow_dispatch) or `Rscript run_all.R` locally -- it is safe to run
+# repeatedly and just keeps overwriting the Week 1 file until real Week 1
+# results exist, at which point completed_weeks is non-empty and this
+# branch is skipped for good.
+return(write_preseason_snapshot(teams, roster_scores, league, league_tag,
+season_label, weeks_dir, graphic_dir,
+pr_dir, base_dir, make_graphic))
+}
 
 # ---- Matchups
 games <- build_matchups(league_id, completed_weeks)
@@ -806,6 +898,8 @@ games$opponent))]),
 opponent = unname(id_to_owner[as.character(c(games$opponent,
 games$team))]),
 win = c(games$result, 1 - games$result),
+points = c(games$team_points, games$opponent_points),
+opp_points = c(games$opponent_points, games$team_points),
 stringsAsFactors = FALSE)
 }
 
@@ -851,6 +945,12 @@ Seasons = as.integer(table(so$owner)[owners]),
 W = as.integer(tapply(long$win == 1, long$owner, sum)[owners]),
 L = as.integer(tapply(long$win == 0, long$owner, sum)[owners]),
 T = as.integer(tapply(long$win == 0.5, long$owner, sum)[owners]),
+# All-time points for/against, summed across every regular-season game in
+# every season on record. Formatted to 1 decimal as a string so the
+# Shiny app's renderTable(..., digits = 3) (tuned for the Win % column)
+# does not pad these with extra trailing zeros.
+PF = sprintf("%.1f", as.numeric(tapply(long$points, long$owner, sum)[owners])),
+PA = sprintf("%.1f", as.numeric(tapply(long$opp_points, long$owner, sum)[owners])),
 stringsAsFactors = FALSE, check.names = FALSE)
 
 # Merge pre-API seed records (outer join: owners may exist in either era)
@@ -864,7 +964,7 @@ m[[cl]][is.na(m[[cl]])] <- 0
 m$Seasons <- m$Seasons + m$Seasons_seed
 m$W <- m$W + m$W_seed
 m$L <- m$L + m$L_seed
-totals <- m[, c("Owner", "Seasons", "W", "L", "T")]
+totals <- m[, c("Owner", "Seasons", "W", "L", "T", "PF", "PA")]
 }
 totals <- finalize_totals(totals, champs_df)
 
