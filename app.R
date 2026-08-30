@@ -285,7 +285,7 @@ fn = function(x) gt::web_image(x, height = 28)
 gt::cols_label(headshot = "", Player = "Player", NFL = "Team",
 Value = "Value") |>
 gt::fmt_number(columns = "Value", decimals = 0) |>
-gt::sub_missing(columns = "Value", missing_text = "â") |>
+gt::sub_missing(columns = "Value", missing_text = "—") |>
 gt::data_color(columns = "Value",
 palette = c("#fee08b", "#1a9850"), na_color = "#eeeeee") |>
 gt::tab_header(title = paste0(me, "'s Roster")) |>
@@ -462,10 +462,10 @@ cur$avg_pa <- NA_real_; cur$avg_pf <- NA_real_
 cur <- cur[order(cur$rank), ]
 cur$record <- paste0(cur$Win, "-", cur$Loss,
 ifelse(cur$Draw > 0, paste0("-", cur$Draw), ""))
-cur$move <- ifelse(is.na(cur$rank_change) | cur$rank_change == 0, "â",
+cur$move <- ifelse(is.na(cur$rank_change) | cur$rank_change == 0, "—",
 ifelse(cur$rank_change > 0,
-paste0("â² ", cur$rank_change),
-paste0("â¼ ", abs(cur$rank_change))))
+paste0("▲ ", cur$rank_change),
+paste0("▼ ", abs(cur$rank_change))))
 cur$avatar_url[is.na(cur$avatar_url)] <-
 "https://sleepercdn.com/images/v2/icons/league/league_avatar_mint.png"
 cur$owner <- cur$Player

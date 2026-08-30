@@ -523,7 +523,7 @@ gt_df <- tbl[, c("rank", "move", "avatar_url", "team_name", "owner",
 "Rating", "rating_change", "record", "avg_pf", "avg_pa")]
 gt::gt(gt_df) |>
 gt::tab_header(
-title = gt::md(paste0("**", league_name, " â Power Rankings**")),
+title = gt::md(paste0("**", league_name, " — Power Rankings**")),
 subtitle = paste0("Week ", next_week,
 " | Glicko-2 ratings through Week ", latest_week)
 ) |>
@@ -533,24 +533,24 @@ fn = function(x) gt::web_image(x, height = 32)
 ) |>
 gt::cols_label(rank = "#", move = "", avatar_url = "", team_name = "Team",
 owner = "Owner", Rating = "Rating",
-rating_change = "Î Rating", record = "W-L",
+rating_change = "Δ Rating", record = "W-L",
 avg_pf = "Avg PF", avg_pa = "Avg PA") |>
 gt::fmt_number(columns = "Rating", decimals = 0) |>
 gt::fmt_number(columns = "rating_change", decimals = 1,
 force_sign = TRUE) |>
 gt::fmt_number(columns = c("avg_pf", "avg_pa"), decimals = 2) |>
-gt::sub_missing(columns = "rating_change", missing_text = "â") |>
+gt::sub_missing(columns = "rating_change", missing_text = "—") |>
 gt::data_color(columns = "Rating",
 palette = c("#d73027", "#fee08b", "#1a9850")) |>
 gt::tab_style(
 style = gt::cell_text(color = "#1a9850", weight = "bold"),
 locations = gt::cells_body(columns = "move",
-rows = grepl("â²", tbl$move))
+rows = grepl("▲", tbl$move))
 ) |>
 gt::tab_style(
 style = gt::cell_text(color = "#d73027", weight = "bold"),
 locations = gt::cells_body(columns = "move",
-rows = grepl("â¼", tbl$move))
+rows = grepl("▼", tbl$move))
 ) |>
 gt::tab_style(style = gt::cell_text(weight = "bold"),
 locations = gt::cells_body(columns = c("rank", "team_name"))) |>
@@ -610,7 +610,7 @@ tbl$rating_change <- NA_real_
 tbl <- merge(tbl, teams, by = "roster_id", all.x = TRUE, sort = FALSE)
 tbl <- tbl[order(tbl$rank), ]
 tbl$record <- "0-0"
-tbl$move <- "â"
+tbl$move <- "—"
 tbl$avatar_url[is.na(tbl$avatar_url)] <-
 "https://sleepercdn.com/images/v2/icons/league/league_avatar_mint.png"
 tbl$avg_pf <- NA_real_
@@ -794,10 +794,10 @@ by = "Player", all.x = TRUE, sort = FALSE)
 tbl <- tbl[order(tbl$rank), ]
 tbl$record <- paste0(tbl$Win, "-", tbl$Loss,
 ifelse(tbl$Draw > 0, paste0("-", tbl$Draw), ""))
-tbl$move <- ifelse(is.na(tbl$rank_change) | tbl$rank_change == 0, "â",
+tbl$move <- ifelse(is.na(tbl$rank_change) | tbl$rank_change == 0, "—",
 ifelse(tbl$rank_change > 0,
-paste0("â² ", tbl$rank_change),
-paste0("â¼ ", abs(tbl$rank_change))))
+paste0("▲ ", tbl$rank_change),
+paste0("▼ ", abs(tbl$rank_change))))
 tbl$avatar_url[is.na(tbl$avatar_url)] <-
 "https://sleepercdn.com/images/v2/icons/league/league_avatar_mint.png"
 
@@ -969,7 +969,7 @@ totals <- m[, c("Owner", "Seasons", "W", "L", "T", "PF", "PA")]
 totals <- finalize_totals(totals, champs_df)
 
 # ---- Head-to-head matrix (W-L from the row owner's perspective)
-h2h <- matrix("â", length(owners), length(owners),
+h2h <- matrix("—", length(owners), length(owners),
 dimnames = list(owners, owners))
 for (i in owners) {
 for (j in owners) {
