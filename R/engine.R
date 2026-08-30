@@ -23,6 +23,24 @@ stop("Missing packages: ", paste(missing_pkgs, collapse = ", "),
 paste0('"', missing_pkgs, '"', collapse = ", "), "))")
 }
 
+# The requireNamespace() checks above go through vapply() with the package
+# name passed as a variable. rsconnect's static dependency scanner
+# (renv::dependencies()) does not follow that -- it only recognizes a
+# literal string passed directly to requireNamespace()/library()/::.
+# webshot2 in particular is never referenced via `::` anywhere else in this
+# file (it's only used internally by gt::gtsave()), so without an explicit
+# reference like the one below, it can be silently left out of the
+# deployment bundle -- the app then fails to start on the server with
+# "Missing packages: webshot2" even though everything runs fine locally.
+# This block is never executed (guarded by FALSE); it exists only so the
+# dependency scanner picks up jsonlite/PlayerRatings/gt/webshot2 directly.
+if (FALSE) {
+  requireNamespace("jsonlite")
+  requireNamespace("PlayerRatings")
+  requireNamespace("gt")
+  requireNamespace("webshot2")
+}
+
 # --------------------------- API HELPERS -------------------------------------
 
 fetch_json <- function(url) {
