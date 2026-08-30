@@ -585,7 +585,7 @@ Record = paste0(W, "-", L,
 ifelse(T > 0, paste0("-", T), "")),
 `Win %` = round((W + 0.5 * T) / (W + L + T), 3),
 check.names = FALSE, row.names = NULL)
-out[order(-out`Win %`, out$Opponent), ]
+out[order(-out$`Win %`, out$Opponent), ]
 }, striped = TRUE, digits = 3)
 }
 
