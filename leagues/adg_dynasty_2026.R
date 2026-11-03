@@ -10,14 +10,9 @@ list(
     season_label = "2026-2027",
     data_dir     = "data/adg_dynasty",
 
-    # Preseason/roster strength scoring, used for (a) Glicko-2 initial ratings
-    # and (b) the ROST SCORE column in League Stats > Summary.
-    #   "fantasycalc" - computed live each run: sums FantasyCalc player values
-    #                   (see is_dynasty/ppr below) per Sleeper roster, then
-    #                   ranks teams 1-8 (1 = strongest roster).
-    #   "manual"      - uses the roster_scores vector below instead.
-    #   NULL          - disabled; all teams start at 1500, ROST SCORE hidden.
-    roster_score_source = "manual",
+    # Glicko-2 initial ratings and the ROST SCORE column in League Stats >
+    # Summary both come from the manual roster_scores vector below. Set
+    # roster_scores = NULL to start every team at 1500 and hide ROST SCORE.
     is_dynasty = TRUE,   # dynasty rosters carry over; FALSE = redraft values
     ppr        = 1,      # matches this league's full-PPR scoring
 
@@ -26,10 +21,9 @@ list(
     # app); set FALSE to skip it entirely for this league.
     enable_simulation = TRUE,
     sim_n_seasons = 250,  # more = smoother odds, slower CI run
-    sim_n_weeks   = 14,   # matches this league's regular-season length (playoffs start week 15)
+    sim_n_weeks   = 14,   # fallback only; season length is read from Sleeper
 
-    # Manual preseason roster power ranking, only used because
-    # roster_score_source == "manual" above. Owner supplied a 1-8 ranking
+    # Manual preseason roster power ranking. Owner supplied a 1-8 ranking
     # (1 = best); converted here to a "higher = stronger" score (9 - rank)
     # and ordered by roster_id 1-8 (PlayerRatings::glicko2 z-scores this
     # vector to seed initial ratings at mean 1500 / SD 100):

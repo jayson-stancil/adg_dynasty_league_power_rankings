@@ -34,7 +34,7 @@ scoped to a single league.
 
 ## Updating the preseason ranking each season
 
-`leagues/adg_dynasty_2026.R` uses `roster_score_source = "manual"` with a
+`leagues/adg_dynasty_2026.R` uses a manual
 `roster_scores` vector derived from a 1-8 preseason power ranking (1 = best).
 Before Week 1 of a new season:
 
