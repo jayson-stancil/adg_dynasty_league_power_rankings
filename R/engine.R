@@ -224,25 +224,91 @@ value = d$value, stringsAsFactors = FALSE)
 
 fetch_sleeper_players <- function() sleeper("players/nfl")
 
+# Shared by fetch_draft_pick_map() (draft results) and
+# fetch_league_transactions() (adds/drops) for player_id -> display name.
+player_full_name <- function(pid, players_ref) {
+p <- players_ref[[as.character(pid)]]
+if (!is.null(p$full_name) && nzchar(p$full_name)) p$full_name
+else as.character(pid)
+}
+
+# Resolves one season's rookie draft into the lookup fmt_pick() (below)
+# uses to turn a traded pick into its actual slot, e.g. "1.03", and, once
+# that draft has been run, the player picked with it, e.g. "1.03 (Player
+# Name)". Returns NULL if the league has no draft yet for this season --
+# fmt_pick() then falls back to the plain "Round N Pick" label.
+#
+# league_id Sleeper league ID for the season the PICK belongs to -- not
+# the season the trade happened in; a pick is often traded years before
+# its own draft
+# players_ref fetch_sleeper_players() output, for player_id -> name
+fetch_draft_pick_map <- function(league_id, players_ref) {
+drafts <- tryCatch(sleeper_raw(paste0("league/", league_id, "/drafts")),
+error = function(e) NULL)
+if (!length(drafts)) return(NULL)
+
+roster_to_slot <- integer(0)
+player_by_round_slot <- character(0)
+for (dr in drafts) {
+slot_map <- dr$slot_to_roster_id
+if (!length(slot_map)) next
+# slot_map is slot -> roster_id (e.g. list("1" = 4, "2" = 2, ...));
+# reversed here to roster_id -> slot, since fmt_pick() only has the
+# pick's home roster_id to work with.
+rts <- setNames(as.integer(names(slot_map)),
+as.character(unlist(slot_map)))
+roster_to_slot <- c(roster_to_slot, rts)
+
+if (!identical(dr$status, "complete")) next # draft order set, not run yet
+picks <- tryCatch(sleeper_raw(paste0("draft/", dr$draft_id, "/picks")),
+error = function(e) NULL)
+if (!length(picks)) next
+keys <- vapply(picks, function(pk) paste(pk$round, pk$draft_slot),
+character(1))
+nms <- vapply(picks, function(pk) player_full_name(pk$player_id, players_ref),
+character(1))
+player_by_round_slot <- c(player_by_round_slot, setNames(nms, keys))
+}
+if (!length(roster_to_slot)) return(NULL)
+list(roster_to_slot = roster_to_slot, player_by_round_slot = player_by_round_slot)
+}
+
 # league_id Sleeper league ID
 # weeks Integer vector of rounds to check, e.g. 0:18 (0 covers preseason
 # waiver activity; extra out-of-range rounds are silently skipped)
 # players_ref fetch_sleeper_players() output, for player_id -> name
 # teams build_team_table() output, for roster_id -> owner
-fetch_league_transactions <- function(league_id, weeks, players_ref, teams) {
+# draft_maps Named list, season (character) -> fetch_draft_pick_map()
+# result, covering every season a traded pick in this league might
+# reference (built once per update_transactions_cache() run and reused
+# across seasons/weeks, since the same pick can be re-traded years
+# before its own draft). Defaults to none, which leaves every pick as
+# the plain "Round N Pick" label.
+fetch_league_transactions <- function(league_id, weeks, players_ref, teams,
+draft_maps = list()) {
 id_to_owner <- setNames(teams$owner, teams$roster_id)
-pname <- function(pid) {
-p <- players_ref[[as.character(pid)]]
-if (!is.null(p$full_name) && nzchar(p$full_name)) p$full_name
-else as.character(pid)
+pname <- function(pid) player_full_name(pid, players_ref)
+
+# A traded draft pick. Degrades gracefully as more becomes known:
+# "2025 Round 1 Pick" (that season's draft order isn't set yet) ->
+# "2025 1.03" (slot known, draft not yet run) ->
+# "2025 1.03 (Player Name)" (draft complete). roster_id on the element
+# is the pick's original/home roster -- fixed when the pick was
+# created and unaffected by any later re-trade of the same pick, so
+# every trade that ever moved this pick resolves to the same slot and
+# (once drafted) the same player -- and is NOT who it moved between in
+# this specific transaction, so it's used only to look up the slot.
+fmt_pick <- function(p) {
+base <- paste0(p$season, " Round ", p$round, " Pick")
+dm <- draft_maps[[as.character(p$season)]]
+if (is.null(dm)) return(base)
+slot <- dm$roster_to_slot[as.character(p$roster_id)]
+if (is.na(slot) || !length(slot)) return(base)
+label <- paste0(p$season, " ", p$round, ".", sprintf("%02d", slot))
+nm <- dm$player_by_round_slot[paste(p$round, slot)]
+if (is.na(nm) || !length(nm) || !nzchar(nm)) return(label)
+paste0(label, " (", nm, ")")
 }
-# A traded draft pick, e.g. "2027 Round 1 Pick". Confirmed against this
-# league's live /draft_picks payload: each element of a trade's
-# draft_picks array has season (string), round (int), owner_id (new
-# holder after this trade), and previous_owner_id (holder just before
-# it) -- roster_id on the element is the pick's original/home roster and
-# is NOT who it moved between, so it's unused here.
-fmt_pick <- function(p) paste0(p$season, " Round ", p$round, " Pick")
 
 rows <- list()
 for (wk in weeks) {
@@ -320,6 +386,15 @@ message("No seasons found for league ", league_id, "; nothing to cache.")
 return(invisible(NULL))
 }
 
+# One draft-pick lookup per season in the chain, built up front and
+# reused across every season's transactions below -- a traded pick can
+# reference any season in this range (past, current, or a future one
+# not yet drafted), regardless of which season the trade itself
+# happened in.
+draft_maps <- setNames(
+lapply(chain, function(lg) fetch_draft_pick_map(lg$league_id, players_ref)),
+vapply(chain, function(lg) lg$season, character(1)))
+
 tx_dir <- file.path(base_dir, "Transactions")
 if (!dir.exists(tx_dir)) dir.create(tx_dir, recursive = TRUE)
 
@@ -336,7 +411,7 @@ season_tx <- tryCatch({
 users <- sleeper(paste0("league/", lg$league_id, "/users"))
 rosters <- sleeper(paste0("league/", lg$league_id, "/rosters"))
 teams <- suppressWarnings(build_team_table(users, rosters, owner_map))
-fetch_league_transactions(lg$league_id, weeks, players_ref, teams)
+fetch_league_transactions(lg$league_id, weeks, players_ref, teams, draft_maps)
 }, error = function(e) {
 message("Skipped transactions for season ", lg$season, ": ",
 conditionMessage(e))
