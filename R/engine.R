@@ -250,7 +250,11 @@ if (!length(drafts)) return(NULL)
 roster_to_slot <- integer(0)
 player_by_round_slot <- character(0)
 for (dr in drafts) {
-slot_map <- dr$slot_to_roster_id
+# league/{id}/drafts (above) only lists draft_id/season/status -- the
+# slot assignment is on the single-draft detail endpoint, not here.
+detail <- tryCatch(sleeper_raw(paste0("draft/", dr$draft_id)),
+error = function(e) NULL)
+slot_map <- detail$slot_to_roster_id
 if (!length(slot_map)) next
 # slot_map is slot -> roster_id (e.g. list("1" = 4, "2" = 2, ...));
 # reversed here to roster_id -> slot, since fmt_pick() only has the
@@ -259,7 +263,7 @@ rts <- setNames(as.integer(names(slot_map)),
 as.character(unlist(slot_map)))
 roster_to_slot <- c(roster_to_slot, rts)
 
-if (!identical(dr$status, "complete")) next # draft order set, not run yet
+if (!identical(detail$status, "complete")) next # draft order set, not run yet
 picks <- tryCatch(sleeper_raw(paste0("draft/", dr$draft_id, "/picks")),
 error = function(e) NULL)
 if (!length(picks)) next
