@@ -1,5 +1,5 @@
 "week","team_roster_id","Team","team_win_pct","opponent_roster_id","Opponent","opponent_win_pct"
-1,1,"KING COMMISH",0.508,2,"Ethan Thimme",0.492
-1,4,"Colin Kelly",0.616,5,"Tommy Pack",0.384
-1,6,"Ethan Purdy",0.496,7,"Kellen McHugh",0.504
-1,3,"Jordan Lacy",0.292,8,"Elijah Sartin",0.708
+1,1,"KING COMMISH",0.536,4,"Colin Kelly",0.464
+1,2,"Ethan Thimme",0.552,5,"Tommy Pack",0.448
+1,3,"Jordan Lacy",0.888,6,"Ethan Purdy",0.112
+1,7,"Kellen McHugh",0.564,8,"Elijah Sartin",0.436
